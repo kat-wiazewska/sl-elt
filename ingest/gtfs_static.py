@@ -8,7 +8,8 @@ import os
 import sys
 import zipfile
 from dotenv import load_dotenv
-
+import pandas as pd
+from sqlalchemy import create_engine
 
 load_dotenv()
 
@@ -28,7 +29,9 @@ url = f"https://opendata.samtrafiken.se/gtfs-sweden/sweden.zip?key={api_key}"
 zip_path = "data/gtfs-sweden.zip"
 
 print("Downloading GTFS zip...")
+
 # Trafiklab requires Accept-Encoding header — without it, returns a JSON error instead of the zip.
+
 response = requests.get(url, headers={"Accept-Encoding": "gzip, deflate"}, timeout=120)
 
 if response.status_code != 200:
@@ -36,6 +39,7 @@ if response.status_code != 200:
     sys.exit(1)
 
 # Binary write — zip files are not text
+
 with open(zip_path, "wb") as f:
     f.write(response.content)
 
@@ -50,3 +54,21 @@ with zipfile.ZipFile(zip_path, "r") as z:
     z.extractall(extract_dir)
 
 print(f"Extracted {len(os.listdir(extract_dir))} files")
+
+# Load CSVs into Postgres
+# The format of the  connection string: postgresql://username:password@host:port/database
+
+db_url = f"postgresql://dwh_admin:{os.environ.get('POSTGRES_PASSWORD')}@localhost:5432/dwh"
+engine = create_engine(db_url)
+
+# Tier 1: small files to test with
+
+tier1_files = ["agency.txt", "routes.txt", "calendar.txt", "feed_info.txt"]
+
+for filename in tier1_files:
+    table_name = filename.replace(".txt", "")
+    filepath = f"{extract_dir}/{filename}"
+    print(f"Loading {filename} into raw.{table_name}...")
+    df = pd.read_csv(filepath)
+    df.to_sql(table_name, engine, schema="raw", if_exists="replace", index=False)
+    print(f"  → {len(df)} rows loaded")
