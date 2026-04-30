@@ -208,3 +208,7 @@ __marimo__/
 .env
 data/
 scratch/
+
+# Backup files
+*.save
+*.backup
