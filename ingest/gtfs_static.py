@@ -10,6 +10,7 @@ import zipfile
 from dotenv import load_dotenv
 import pandas as pd
 from sqlalchemy import create_engine
+from urllib.parse import quote_plus
 
 load_dotenv()
 
@@ -58,7 +59,7 @@ print(f"Extracted {len(os.listdir(extract_dir))} files")
 # Load CSVs into Postgres
 # The format of the  connection string: postgresql://username:password@host:port/database
 
-db_url = f"postgresql://dwh_admin:{os.environ.get('POSTGRES_PASSWORD')}@localhost:5432/dwh"
+db_url = f"postgresql://dwh_admin:{quote_plus(os.environ.get('POSTGRES_PASSWORD'))}@localhost:5432/dwh"
 engine = create_engine(db_url)
 
 # Tier 1: small files to test with
