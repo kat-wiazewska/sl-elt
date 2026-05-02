@@ -73,3 +73,16 @@ for filename in tier1_files:
     df = pd.read_csv(filepath)
     df.to_sql(table_name, engine, schema="raw", if_exists="replace", index=False)
     print(f"  → {len(df)} rows loaded")
+
+# Tier 2: medium files
+tier2_files = ["stops.txt", "trips.txt", "calendar_dates.txt"]
+
+for filename in tier2_files:
+    table_name = filename.replace(".txt", "")
+    filepath = f"{extract_dir}/{filename}"
+    print(f"Loading {filename} into raw.{table_name}...")
+    df = pd.read_csv(filepath)
+    df.to_sql(table_name, engine, schema="raw", if_exists="replace", index=False)
+    print(f"  → {len(df)} rows loaded")
+
+
