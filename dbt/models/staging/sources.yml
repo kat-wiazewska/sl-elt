@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: agency
+      - name: routes
+      - name: calendar
+      - name: feed_info
+      - name: stops
+      - name: trips
+      - name: calendar_dates
