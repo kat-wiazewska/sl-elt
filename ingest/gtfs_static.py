@@ -1,6 +1,6 @@
 """
 GTFS Static ingestion script.
-Downloads the GTFS Sweden 3 zip from Trafiklab and loads CSVs into Postgres raw schema.
+Downloads the GTFS Regional (SL) zip from Trafiklab and loads CSVs into Postgres raw schema.
 """
 
 import requests
@@ -9,25 +9,24 @@ import sys
 import zipfile
 from dotenv import load_dotenv
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from urllib.parse import quote_plus
 
 load_dotenv()
 
-api_key = os.environ.get("TRAFIKLAB_GTFS_STATIC_KEY")
+api_key = os.environ.get("GTFS_REG_STATIC_KEY")
 if not api_key:
-    print("ERROR: TRAFIKLAB_GTFS_STATIC_KEY not found in .env")
+    print("ERROR: GTFS_REG_STATIC_KEY not found in .env")
     sys.exit(1)
 
 # We print the length instead of the actual key so we can confirm it loaded without exposing the secret in the terminal output.
 
 print(f"API key loaded ({len(api_key)} characters)")
 
-# Full Sweden feed - we filter to SL operator later in dbt, not here.
-# Keeping all of Sweden in raw means we can add other cities without re-downloading.
+# SL regional feed - only Stockholm
 
-url = f"https://opendata.samtrafiken.se/gtfs-sweden/sweden.zip?key={api_key}"
-zip_path = "data/gtfs-sweden.zip"
+url = f"https://opendata.samtrafiken.se/gtfs/sl/sl.zip?key={api_key}"
+zip_path = "data/gtfs-sl.zip"
 
 print("Downloading GTFS zip...")
 
@@ -47,9 +46,9 @@ with open(zip_path, "wb") as f:
 size_mb = len(response.content) / 1024 / 1024
 print(f"Downloaded {size_mb:.1f} MB to {zip_path}")
 
-# Unzip to data/gtfs-sweden/, overwriting any previous extract
+# Unzip to data/gtfs-sl/, overwriting any previous extract
 
-extract_dir = "data/gtfs-sweden"
+extract_dir = "data/gtfs-sl"
 print(f"Extracting to {extract_dir}/...")
 with zipfile.ZipFile(zip_path, "r") as z:
     z.extractall(extract_dir)
@@ -71,7 +70,13 @@ for filename in tier1_files:
     filepath = f"{extract_dir}/{filename}"
     print(f"Loading {filename} into raw.{table_name}...")
     df = pd.read_csv(filepath)
-    df.to_sql(table_name, engine, schema="raw", if_exists="replace", index=False)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"TRUNCATE TABLE raw.{table_name}"))
+            conn.commit()
+    except Exception:
+        pass
+    df.to_sql(table_name, engine, schema="raw", if_exists="append", index=False)
     print(f"  → {len(df)} rows loaded")
 
 # Tier 2: medium files
@@ -82,7 +87,25 @@ for filename in tier2_files:
     filepath = f"{extract_dir}/{filename}"
     print(f"Loading {filename} into raw.{table_name}...")
     df = pd.read_csv(filepath)
-    df.to_sql(table_name, engine, schema="raw", if_exists="replace", index=False)
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f"TRUNCATE TABLE raw.{table_name}"))
+            conn.commit()
+    except Exception:
+        pass
+    df.to_sql(table_name, engine, schema="raw", if_exists="append", index=False)
     print(f"  → {len(df)} rows loaded")
 
-
+# Tier 3: large files — chunked to avoid OOM on 4GB RAM
+print("Loading stop_times.txt into raw.stop_times...")
+try:
+    with engine.connect() as conn:
+        conn.execute(text("TRUNCATE TABLE raw.stop_times"))
+        conn.commit()
+except Exception:
+    pass
+chunks = pd.read_csv(f"{extract_dir}/stop_times.txt", chunksize=50000)
+for i, chunk in enumerate(chunks):
+    chunk.to_sql("stop_times", engine, schema="raw", if_exists="append", index=False)
+    print(f"  chunk {i} → {len(chunk)} rows written")
+print("  ✓ stop_times loaded")
