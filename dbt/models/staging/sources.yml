@@ -11,3 +11,4 @@ sources:
       - name: stops
       - name: trips
       - name: calendar_dates
+      - name: stop_times
